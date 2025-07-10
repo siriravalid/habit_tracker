@@ -124,13 +124,25 @@ def update_sheet(df, habits_today, today):
     return df
 
 def analyze_period(df, period="week"):
-    today = datetime.today()
     if period == "week":
-        start = today - timedelta(days=today.weekday())  # Monday
-    else:
+        # Get the start date of the current week (Monday)
+        today = datetime.today()
+        start = today - timedelta(days=today.weekday())
+        end = start + timedelta(days=6)
+    else:  # month
+        # Get the start and end dates of the current month
+        today = datetime.today()
         start = today.replace(day=1)
+        if start.month == 12:
+            end = start.replace(year=start.year+1, month=1, day=1) - timedelta(days=1)
+        else:
+            end = start.replace(month=start.month+1, day=1) - timedelta(days=1)
+    
+    # Convert Date column to datetime
     df["Date"] = pd.to_datetime(df["Date"])
-    mask = df["Date"] >= start
+    
+    # Filter data for the selected period
+    mask = (df["Date"] >= start) & (df["Date"] <= end)
     df_period = df[mask]
     
     # Core habits we want to track
@@ -145,7 +157,11 @@ def analyze_period(df, period="week"):
             if habit in row and row[habit].lower() == "yes":
                 habit_counts[habit] += 1
     
-    return pd.Series(habit_counts)
+    # Create a Series with counts and add total days for context
+    result = pd.Series(habit_counts)
+    result["Total Days in Period"] = len(df_period)
+    
+    return result
 
 def grok_feedback(user_text):
     # Return a basic feedback since Grok API is not accessible
@@ -195,20 +211,23 @@ def show_chart(counts, title):
 
 st.title("Smart Habit Tracker with NLP + Visualization")
 
+# Date selection
+selected_date = st.date_input("Select a date", datetime.today())
+selected_date_str = selected_date.strftime("%Y-%m-%d")
+
 st.markdown("Enter a short note about your day (e.g. *I exercised, read, and spent time on social media*)")
 
 user_text = st.text_area("Your Daily Log", height=150)
 
-if st.button("Log My Day"):
+if st.button("Log Habits"):
     if user_text.strip() == "":
         st.warning("Please enter some text first.")
     else:
-        today = datetime.today().strftime("%Y-%m-%d")
         data = load_data()
         habits = extract_habits(user_text)
-        new_data = update_sheet(data, habits, today)
+        new_data = update_sheet(data, habits, selected_date_str)
         save_data(new_data)
-        st.success(f"Logged for {today}")
+        st.success(f"Logged for {selected_date_str}")
         st.write("✅ Habits Detected:", habits)
         st.markdown("### 🤖 Grok's Smart Suggestion")
         st.info(grok_feedback(user_text))
